@@ -52,8 +52,12 @@ public class WebServer {
         // blank line signals the end of the client HTTP
         // headers.
         String str = ".";
-        while (str != null && !str.equals(""))
+        while (str != null && !str.equals("")) {
           str = in.readLine();
+          if (str.contains("GET")) {
+            out.println("Nous recevons une requête GET");
+          }
+        }
 
         // Send the response
         // Send the headers
@@ -63,9 +67,10 @@ public class WebServer {
         // this blank line signals the end of the headers
         out.println("");
         // Send the HTML page
-        out.println("<H1>Welcome to the Ultra Mini-WebServer</H2>");
+        out.println("<H1>Welcome to the Ultra Mini-WebServer</H1>");
         out.flush();
         remote.close();
+
       } catch (Exception e) {
         System.out.println("Error: " + e);
       }
