@@ -2,15 +2,16 @@
 
 package http.server;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,12 +39,15 @@ public class WebServer {
    * @return String containing the request line
    * @throws IOException
    */
-  protected String readLigneRequete(BufferedReader in) throws IOException {
-    String str = ".";
+  protected String readRequestLine(BufferedInputStream in) throws IOException {
     String requestLine = "";
-    str = in.readLine();
-    if (str != null && !str.equals(""))
-      requestLine = str;
+    while (in.available() > 0) {
+      int cur = in.read();
+      requestLine += (char) cur;
+      if (requestLine.contains("\r\n")) {
+        break;
+      }
+    }
     return requestLine;
   }
 
@@ -54,56 +58,65 @@ public class WebServer {
    * @return Map of key - header name and value - header value
    * @throws IOException
    */
-  protected Map<String, String> readEnTetes(BufferedReader in) throws IOException {
-    String str = ".";
+  protected Map<String, String> readHeaders(BufferedInputStream in) throws IOException {
     Map<String, String> headerFields = new HashMap<>();
-    while (str != null && !str.equals("")) {
-      str = in.readLine();
-      if (str != null && !str.equals("")) {
-        int indexFin = str.indexOf(":");
+    String header = "";
+    
+    while (in.available() > 0) {
+      int cur = in.read();
+      header += (char) cur;
+      //A blank line signals the end of the HTTP headers
+      if(header.equals("\r\n")) {
+        break;
+      }
+      //The end of the current header
+      else if (header.contains("\r\n")) {
+        int indexFin = header.indexOf(":");
         if (indexFin != -1)
-          headerFields.put(str.substring(0, indexFin).trim(), str.substring(indexFin + 1).trim());
+        headerFields.put(header.substring(0, indexFin).trim(), header.substring(indexFin + 1).trim());
+        header="";
       }
     }
     return headerFields;
   }
 
   /**
-   * Read the request body in case there is one
+   * Reading the request body in case there is one
    * 
    * @param in
    * @param headers
    * @return String containing the body of the request
    * @throws IOException
    */
-  protected String readBody(BufferedReader in, Map<String, String> headers) throws IOException {
-    String body = "";
+  protected byte[] readBody(BufferedInputStream in, Map<String, String> headers) throws IOException {
+    byte[] body = null;
     if (headers.containsKey("Content-Length")) {
       int nbrCharac = Integer.parseInt(headers.get("Content-Length"));
-      // System.out.println("Content-Length : "+ nbrCharac);
-      int count = 0;
-      while (count < nbrCharac) {
-        body += (char) in.read();
-        count++;
-      }
+      body = new byte[nbrCharac];
+      while(in.available()>0)
+        in.read(body);
     }
     return body;
   }
 
   /**
    * WebServer constructor.
+   * Start the server, accept socket connection and handle different HTTP request
+   * Return a Response that contain a status, headers and that may contain a body
+   * @param portNumber - the port number to start the server on
+   * @throws SocketException
    */
   @SuppressWarnings("unchecked")
-  protected void start() {
+  protected void start(int portNumber) throws SocketException{
     ServerSocket s;
 
     Boolean DEBUG = false;
 
-    System.out.println("Webserver starting up on port 3000");
+    System.out.println("Webserver starting up on port " +portNumber);
     System.out.println("(press ctrl-c to exit)");
     try {
       // create the main server socket
-      s = new ServerSocket(3000);
+      s = new ServerSocket(portNumber);
     } catch (Exception e) {
       System.out.println("Error: " + e);
       return;
@@ -116,105 +129,120 @@ public class WebServer {
         Socket remote = s.accept();
         // remote is now the connected socket
         System.out.println("Connection, sending data.");
-        BufferedReader in = new BufferedReader(new InputStreamReader(remote.getInputStream()));
+        BufferedInputStream in = new BufferedInputStream(remote.getInputStream());
         OutputStream out = remote.getOutputStream();
         
         if(DEBUG)
-          System.out.println("On commence");
-
-        // read the data sent. We basically ignore it,
-        // stop reading once a blank line is hit. This
-        // blank line signals the end of the client HTTP
-        // headers.
+          System.out.println("Starting...");
 
         //Informations about the request
         String requestLine = "";
         Map<String,String> headerFields = new HashMap<>();
-        String body = "";
+        byte[] body = null;
 
-        requestLine = readLigneRequete(in);
-        headerFields = readEnTetes(in);
+        requestLine = readRequestLine(in);
+        headerFields = readHeaders(in);
         body = readBody(in, headerFields);
-        
+
+        //For the response
+        String http="HTTP/1.0";
+        String status = "200";
+        Map<String, String> responseHeaders = new HashMap<>();
+        String responseBody = "";
+
         String path ="";
         String[] params = requestLine.split(" ");
         if(params.length>=2) {
           int indexStart = params[1].indexOf("/");
           path = params[1].substring(indexStart+1).trim();
         } else {
-          System.out.println("La requête envoyé n'était pas une requête HTTP");
+          System.out.println("Error 400 : Request sent was not a HTTP request");
+          status="400";
         }
 
-        if(DEBUG) {
-          System.out.println("Ligne d'en-tête : " + requestLine);
+        if(DEBUG && !requestLine.isEmpty()) {
+          System.out.println("Request Line : " + requestLine);
           System.out.println();
-          System.out.println("En-têtes : \n" + headerFields);
+          System.out.println("Headers : \n" + headerFields);
           System.out.println();
-          System.out.println("Fin de l'en-tête");
+          System.out.println("End of headers");
           System.out.println();
-          System.out.println("Corps : " + body);
+          System.out.println("Body : " + ((body!=null)?"is and length : "+body.length:"no body"));
+          System.out.println("Body : " +Arrays.toString(body));
           System.out.println();
-          System.out.println("Param : " + Arrays.toString(params));
-          System.out.println("Le path : " + path);
+          System.out.println("Parameters : " + Arrays.toString(params));
+          System.out.println("The path : " + path);
         }
 
-        String http="HTTP/1.0";
-        String status = "200";
-        Map<String, String> responseHeaders = new HashMap<>();
-        String responseBody = "";
         List<Object> infosReponse = new ArrayList<>();
        
         if(requestLine.contains("GET")) {
-          if(DEBUG) System.out.println("On a un GET");
+          if(DEBUG && !requestLine.isEmpty()) System.out.println("Here is a GET");
           infosReponse =handleGet(path, responseHeaders, responseBody);
         }
         else if(requestLine.contains("POST")) {
-          if(DEBUG) System.out.println("On a un POST");
+          if(DEBUG && !requestLine.isEmpty()) System.out.println("Here is a POST");
           infosReponse = handlePost(path, body, responseHeaders, responseBody);
         } 
         else if(requestLine.contains("PUT")) {
-          if(DEBUG) System.out.println("On a un PUT");
+          if(DEBUG && !requestLine.isEmpty()) System.out.println("Here is a PUT");
           infosReponse = handlePut(path, body, responseHeaders, responseBody);
         }
         else if(requestLine.contains("HEAD")) {
-          if(DEBUG) System.out.println("On a un HEAD");
+          if(DEBUG && !requestLine.isEmpty()) System.out.println("Here is a HEAD");
           infosReponse = handleHead(path, responseHeaders, responseBody);
         }
         else if(requestLine.contains("DELETE")) {
-          if(DEBUG) System.out.println("On a un DELETE");
+          if(DEBUG && !requestLine.isEmpty()) System.out.println("Here is a DELETE");
           infosReponse = handleDelete(path, responseHeaders, responseBody);
         }
-        else if(requestLine.contains("OPTION")) {
-          if(DEBUG) System.out.println("On a un OPTION");
+        else if(status.equals("200")){
+          System.out.println("Error 501 : Not implemented\r\n");
+          status="501";
         }
 
-        if(infosReponse.size()==2) {
+        if(infosReponse.size()==3) {
           responseHeaders = (Map<String,String>) infosReponse.get(0);
           responseBody = (String) infosReponse.get(1);
+          status = (String) infosReponse.get(2);
+        } else {
+          status="500";
         }
 
-        if(DEBUG) {
-          System.out.println("responseBody : " +responseBody);
-          System.out.println("responseHeaders : " +responseHeaders);
+        if(DEBUG && !requestLine.isEmpty()) {
+          if(!responseBody.isEmpty())
+            System.out.println("responseBody : " +responseBody);
+          if(!responseHeaders.isEmpty())
+            System.out.println("responseHeaders : " +responseHeaders);
         }
 
-        out.write((http +" "+status+"\r\n").getBytes("UTF-8"));
-        for(Map.Entry<String,String> entry: responseHeaders.entrySet()) {
-          out.write((entry.getKey()+": "+entry.getValue()+"\r\n").getBytes("UTF-8"));
+        try {
+          out.write((http +" "+status+"\r\n").getBytes("UTF-8"));
+          for(Map.Entry<String,String> entry: responseHeaders.entrySet()) {
+            out.write((entry.getKey()+": "+entry.getValue()+"\r\n").getBytes("UTF-8"));
+          }
+  
+          out.write((""+"\r\n").getBytes("UTF-8"));
+          out.write(Base64.getDecoder().decode(responseBody));
+
+          if(DEBUG && !requestLine.isEmpty())
+            System.out.println("Sending...");
+
+          out.flush();
+          remote.close();
+
+          if(DEBUG && !requestLine.isEmpty())
+            System.out.println("Sent");
+          
+        } catch(SocketException ex) {
+          // Handle the case where client closed the connection while server was writing to it
+          status="500";
+          System.out.println("Connection closed while response was sending\r\n");
+          remote.close();
         }
 
-        out.write((""+"\r\n").getBytes("UTF-8"));
-        //out.write(responseBody.getBytes("UTF-8"));
-        out.write(Base64.getDecoder().decode(responseBody));
-
-        if(DEBUG)
-          System.out.println("On envoie tout");
-
-        out.flush();
-        remote.close();
-
-        if(DEBUG)
-          System.out.println("Envoyé");
+        in.close();
+        out.close();
 
       } catch (Exception e) {
         System.out.println("Error: " + e);
@@ -234,12 +262,17 @@ public class WebServer {
    * @param responseBody - Body of the response
    */
   protected List<Object> handleGet(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
+    String status = "200";
     if (!path.isEmpty()) {
       File file = new File(path);
-      if (!file.exists()) 
+      if (!file.exists()) {
         responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
-      else if (file.isDirectory()) 
+        status="404";
+      }
+      else if (file.isDirectory()) {
         responseBody = Base64.getEncoder().encodeToString("HTTP ERROR : The requested file is a directory\r\n".getBytes("UTF-8"));
+        status="404";
+      }
       else {
         byte[] bytes = Files.readAllBytes(file.toPath());
 
@@ -257,6 +290,7 @@ public class WebServer {
     List<Object> resultat = new ArrayList<>();
     resultat.add(responseHeaders);
     resultat.add(responseBody);
+    resultat.add(status);
     return resultat;
   }
 
@@ -271,23 +305,35 @@ public class WebServer {
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    */
-  protected List<Object> handlePost(String path, String body, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handlePost(String path, byte[] requestBody, Map<String,String> responseHeaders, String responseBody) throws IOException {
+    String status = "200";
     if (!path.isEmpty()) {
       if (path.indexOf("Fichiers/") == 0) {
         File file = new File(path);
-        FileWriter fr = new FileWriter(file, true);
-        BufferedWriter bfr = new BufferedWriter(fr);
-        for (int i = 0; i < body.length(); i++) {
-          bfr.append(body.charAt(i));
-        }
-        bfr.close();
+        /*FileWriter fr = new FileWriter(file, true);
+        BufferedWriter bfr = new BufferedWriter(fr);*/
+        /*for (int i = 0; i < requestBody.length; i++) {
+          bfr.append(requestBody[i]);
+        }*/
+        //bfr.close();
+
+        BufferedOutputStream bof = new BufferedOutputStream(new FileOutputStream(file, file.exists()));
+        bof.write(requestBody);
+
+        bof.flush();
+        bof.close();
       } else {
-        responseBody = Base64.getEncoder().encodeToString("Erreur : le chemin spécifié doit commencer par 'Fichiers/'\r\n".getBytes("UTF-8"));
+        responseBody = Base64.getEncoder().encodeToString("Error 404 : specified path must start with 'Fichiers/'\r\n".getBytes("UTF-8"));
+        status="404";
       }
+    } else {
+      responseBody = Base64.getEncoder().encodeToString("Error 403 : Not authorized to modify welcome page of server\r\n".getBytes("UTF-8"));
+      status="403";
     }
     List<Object> resultat = new ArrayList<>();
     resultat.add(responseHeaders);
     resultat.add(responseBody);
+    resultat.add(status);
     return resultat;
   }
 
@@ -302,23 +348,56 @@ public class WebServer {
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    */
-  protected List<Object> handlePut(String path, String body, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handlePut(String path, byte[] requestBody, Map<String,String> responseHeaders, String responseBody) throws IOException {
+    String status = "204";
     if (!path.isEmpty()) {
       if (path.indexOf("Fichiers/") == 0) {
         File file = new File(path);
-        FileWriter fr = new FileWriter(file);
-        BufferedWriter bfr = new BufferedWriter(fr);
-        for (int i = 0; i < body.length(); i++) {
-          bfr.write(body.charAt(i));
+        if(!file.exists())
+          status="201";
+        PrintWriter pw = new PrintWriter(file);
+        pw.close();
+        OutputStream os = new FileOutputStream(file);
+        //BufferedInputStream fis = new BufferedInputStream(requestBody);
+        //byte[] buffer = new byte[256];
+        try {
+          os.write(requestBody);
+          /*while (requestBody) {
+            int nbRead = requestBody.read(buffer);
+            fos.write(buffer, 0, nbRead);
+        }*/
+          os.flush();
+        } catch(Exception ex) {
+          System.out.println("Error 500 : Can't overwrite body to file");
+          status="500";
+        } finally {
+          os.close();
         }
-        bfr.close();
+        
+        //System.out.println("On est là");
+        //fos.write(requestBody);
+        //System.out.println("Puis là");
+        
+        /*FileWriter fr = new FileWriter(file);
+        BufferedWriter bfr = new BufferedWriter(fr);
+        byte[] bytesBody = Base64.g
+        for (int i = 0; i < bytesBody.length; i++) {
+          System.out.println("Ici - "+bytesBody[i]+"\r\n");
+          bfr.write(bytesBody[i]);
+        }
+        bfr.close();*/
       } else {
-        responseBody = Base64.getEncoder().encodeToString("Erreur : le chemin spécifié doit commencer par 'Fichiers/'\r\n".getBytes("UTF-8"));
+        responseBody = Base64.getEncoder().encodeToString("Error 404 : specified path must start with 'Fichiers/'\r\n".getBytes("UTF-8"));
+        status="404";
       }
+    } else {
+      responseBody = Base64.getEncoder().encodeToString("Error 403 : Not authorized to modify welcome page of server\r\n".getBytes("UTF-8"));
+      status="403";
     }
     List<Object> resultat = new ArrayList<>();
     resultat.add(responseHeaders);
     resultat.add(responseBody);
+    resultat.add(status);
     return resultat;
   }
 
@@ -333,12 +412,17 @@ public class WebServer {
    * @throws IOException
    */
   protected List<Object> handleHead(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
-    if (path.isEmpty()) 
-      responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
+    String status = "200";
+    if (path.isEmpty()) {
+      responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 403 : Not authorized to get information on welcome page of server\r\n".getBytes("UTF-8"));
+      status="403";
+    }
     else {
       File file = new File(path);
-      if (!file.exists())
+      if (!file.exists()) {
         responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
+        status="404";
+      }
       else {
         byte[] bytes = Files.readAllBytes(file.toPath());
         responseHeaders.put("Content-Type", Files.probeContentType(file.toPath()));
@@ -348,6 +432,7 @@ public class WebServer {
     List<Object> resultat = new ArrayList<>();
     resultat.add(responseHeaders);
     resultat.add(responseBody);
+    resultat.add(status);
     return resultat;
   }
 
@@ -362,35 +447,58 @@ public class WebServer {
    * @throws IOException
    */
   protected List<Object> handleDelete(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
-    if (path.isEmpty()) 
-      responseBody = Base64.getEncoder().encodeToString("Vous ne pouvez pas supprimer la page d'accueil du serveur".getBytes("UTF-8"));
-    else {
-      File file = new File(path);
-      if(!file.exists())
-        responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
-      else if(!(path.indexOf("Fichiers/")==0))
-        responseBody = Base64.getEncoder().encodeToString("Erreur : le chemin spécifié doit commencer par 'Fichiers/'".getBytes("UTF-8"));
+    String status = "200";
+    try {
+      if (path.isEmpty()) {
+        responseBody = Base64.getEncoder().encodeToString("Error 403 : Unhautorized to suppress server's welcome page".getBytes("UTF-8"));
+        status="403";
+      }
       else {
-        if(file.delete())
-          responseBody = Base64.getEncoder().encodeToString("Fichier supprimé".getBytes("UTF-8"));
-        else
-          responseBody = Base64.getEncoder().encodeToString(("Erreur : le fichier n'a pas pu être supprimé").getBytes("UTF-8"));
-      } 
+        File file = new File(path);
+        if(!file.getAbsoluteFile().exists()) {
+          responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
+          status="404";
+        }
+        else if(!(path.indexOf("Fichiers/")==0)) {
+          responseBody = Base64.getEncoder().encodeToString("Error : specified path must start with 'Fichiers/'".getBytes("UTF-8"));
+          status="404";
+        }
+        else {
+          if(file.delete())
+            responseBody = Base64.getEncoder().encodeToString("File suppressed".getBytes("UTF-8"));
+          else {
+            responseBody = Base64.getEncoder().encodeToString(("Error 403 : the file couldn't be suppressed").getBytes("UTF-8"));
+            status="403";
+          }
+        } 
+      }
+    }catch(Exception ex) {
+      responseBody = Base64.getEncoder().encodeToString(("Error 500 : Internal Server Error").getBytes("UTF-8"));
+      status="500";
     }
+    
     List<Object> resultat = new ArrayList<>();
     resultat.add(responseHeaders);
     resultat.add(responseBody);
+    resultat.add(status);
     return resultat;
   }
 
   /**
    * Start the application.
    * 
-   * @param args
-   * Command line parameters are not used.
+   * @param args Command line parameters are not used.
+   * @throws SocketException
    */
-  public static void main(String args[]) {
+  public static void main(String args[]) throws SocketException {
     WebServer ws = new WebServer();
-    ws.start();
+    if(args.length !=1) {
+      System.out.println("Usage: java WebServer.java <WebServer port>");
+      System.exit(1);
+    }
+    else {
+      int port = Integer.parseInt(args[0]);
+      ws.start(port);
+    }
   }
 }
