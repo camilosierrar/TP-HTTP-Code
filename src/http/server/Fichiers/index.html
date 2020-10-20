@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<script>
+			function btn1() {
+				
+				const Http = new XMLHttpRequest();
+				const url='https://localhost:3000/';
+				Http.open("POST", url, true);
+				Http.send("OKOK");
+
+				Http.onreadystatechange = (e) => {
+					console.log(Http.responseText);
+				}
+			}
+			function btn2() {
+				alert('Vous avez cliqué sur le bouton 2');
+			}
+		</script>
+	</head>
+	<body>
+		<h2>Bonjour</h2>
+		<label>Cliquez pour envoyer cette page à l'adresse /licorne.html</label> <br>
+		<button onclick="btn1()">Bouton 1</button><br> <br>
+		<label>Cliquez pour envoyer cette page à l'adresse /hydre.html</label><br>
+		<button onclick="btn2()">Bouton 2</button>
+	</body>
+</html>
+<br>
+<b>J'ai ajouté un POST </b><br>
+<b>J'ai ajouté un POST </b><br>
+<b>J'ai ajouté un POST </b>
