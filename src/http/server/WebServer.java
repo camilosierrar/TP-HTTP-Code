@@ -166,23 +166,23 @@ public class WebServer {
        
         if(requestLine.contains("GET")) {
           if(DEBUG) System.out.println("On a un GET");
-          infosReponse =handleGet(out, path, responseHeaders, responseBody);
+          infosReponse =handleGet(path, responseHeaders, responseBody);
         }
         else if(requestLine.contains("POST")) {
           if(DEBUG) System.out.println("On a un POST");
-          infosReponse = handlePost(path, body, out, responseHeaders, responseBody);
+          infosReponse = handlePost(path, body, responseHeaders, responseBody);
         } 
         else if(requestLine.contains("PUT")) {
           if(DEBUG) System.out.println("On a un PUT");
-          infosReponse = handlePut(path, body, out, responseHeaders, responseBody);
+          infosReponse = handlePut(path, body, responseHeaders, responseBody);
         }
         else if(requestLine.contains("HEAD")) {
           if(DEBUG) System.out.println("On a un HEAD");
-          infosReponse = handleHead(out, path, responseHeaders, responseBody);
+          infosReponse = handleHead(path, responseHeaders, responseBody);
         }
         else if(requestLine.contains("DELETE")) {
           if(DEBUG) System.out.println("On a un DELETE");
-          infosReponse = handleDelete(out, path, responseHeaders, responseBody);
+          infosReponse = handleDelete(path, responseHeaders, responseBody);
         }
         else if(requestLine.contains("OPTION")) {
           if(DEBUG) System.out.println("On a un OPTION");
@@ -229,12 +229,11 @@ public class WebServer {
    * Get the file stored at the path specified in the request line and displays
    * it$ In case the file does not exist, an error 404 message is displayed
    * 
-   * @param out  - OutputStream to write the body
    * @param path - URL of the content to get
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    */
-  protected List<Object> handleGet(OutputStream out, String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handleGet(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
     if (!path.isEmpty()) {
       File file = new File(path);
       if (!file.exists()) 
@@ -269,11 +268,10 @@ public class WebServer {
    * 
    * @param path - URL of the content to get
    * @param body - the string to append to the file
-   * @param out
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    */
-  protected List<Object> handlePost(String path, String body, OutputStream out, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handlePost(String path, String body, Map<String,String> responseHeaders, String responseBody) throws IOException {
     if (!path.isEmpty()) {
       if (path.indexOf("Fichiers/") == 0) {
         File file = new File(path);
@@ -301,11 +299,10 @@ public class WebServer {
    * 
    * @param path - URL of the content to get
    * @param body - the string to write to the file
-   * @param out
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    */
-  protected List<Object> handlePut(String path, String body, OutputStream out, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handlePut(String path, String body, Map<String,String> responseHeaders, String responseBody) throws IOException {
     if (!path.isEmpty()) {
       if (path.indexOf("Fichiers/") == 0) {
         File file = new File(path);
@@ -330,13 +327,12 @@ public class WebServer {
    * 
    * Return the Head of the file stored at the path specified in the request line
    * 
-   * @param out  - OutputStream to write the body
    * @param path - URL of the content to get
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    * @throws IOException
    */
-  protected List<Object> handleHead(OutputStream out, String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handleHead(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
     if (path.isEmpty()) 
       responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
     else {
@@ -360,13 +356,12 @@ public class WebServer {
    * 
    * Return the Head of the file stored at the path specified in the request line
    * 
-   * @param out  - OutputStream to write the body
    * @param path - URL of the content to get
    * @param responseHeaders - Map to add response headers to be sent
    * @param responseBody - Body of the response
    * @throws IOException
    */
-  protected List<Object> handleDelete(OutputStream out, String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
+  protected List<Object> handleDelete(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
     if (path.isEmpty()) 
       responseBody = Base64.getEncoder().encodeToString("Vous ne pouvez pas supprimer la page d'accueil du serveur".getBytes("UTF-8"));
     else {
