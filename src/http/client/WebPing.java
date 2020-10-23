@@ -4,6 +4,11 @@ import java.net.InetAddress;
 import java.net.Socket;
 
 public class WebPing {
+  
+  /**
+   * Simple class to ping the server
+   * @param args - 0: server host name, 1 - server port number
+   */
   public static void main(String[] args) {
   
       if (args.length != 2) {
