@@ -1,5 +1,3 @@
-///A Simple Web Server (WebServer.java)
-
 package http.server;
 
 import java.io.BufferedInputStream;
@@ -21,21 +19,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Example program from Chapter 1 Programming Spiders, Bots and Aggregators in
- * Java Copyright 2001 by Jeff Heaton
  * 
- * WebServer is a very simple web-server. Any request is responded with a very
- * simple web-page.
+ * WebServer is a very simple web-server. It handles HTTP request of type
+ * GET, POST, PUT, HEAD, and DELETE and return a response to the client if
+ * necessary
  * 
- * @author Jeff Heaton
+ * @author Versmée Erwan, Sierra Camilo
  * @version 1.0
  */
 public class WebServer {
 
   /**
-   * Reading the first line of the request headers
+   * Reading the first line of the request headers :
+   * this line contains the http method to handle, and a path.
    * 
-   * @param in
+   * @param in - BufferedInputStream to read the request line from
    * @return String containing the request line
    * @throws IOException
    */
@@ -54,7 +52,7 @@ public class WebServer {
   /**
    * Reading the request headers
    * 
-   * @param in
+   * @param in - BufferedInputStream to read the headers from
    * @return Map of key - header name and value - header value
    * @throws IOException
    */
@@ -83,8 +81,8 @@ public class WebServer {
   /**
    * Reading the request body in case there is one
    * 
-   * @param in
-   * @param headers
+   * @param in - BufferedInputStream to read the body from
+   * @param headers - the headers of the request
    * @return String containing the body of the request
    * @throws IOException
    */
@@ -151,8 +149,11 @@ public class WebServer {
         String responseBody = "";
 
         String path ="";
+        String httpMethod="";
         String[] params = requestLine.split(" ");
         if(params.length>=2) {
+          httpMethod = params[0];
+          System.out.println(httpMethod);
           int indexStart = params[1].indexOf("/");
           path = params[1].substring(indexStart+1).trim();
         } else {
@@ -229,20 +230,25 @@ public class WebServer {
             System.out.println("Sending...");
 
           out.flush();
-          remote.close();
 
           if(DEBUG && !requestLine.isEmpty())
             System.out.println("Sent");
           
-        } catch(SocketException ex) {
+        } 
+        catch(SocketException ex) {
           // Handle the case where client closed the connection while server was writing to it
-          status="500";
           System.out.println("Connection closed while response was sending\r\n");
-          remote.close();
         }
-
-        in.close();
-        out.close();
+        catch(Exception ex) {
+          ex.printStackTrace();
+          try {
+            out.write("500 Internal Server Error".getBytes("UTF-8"));
+            status="500";
+            out.flush();
+          } 
+          catch (Exception e2) {};
+        }
+        remote.close();
 
       } catch (Exception e) {
         System.out.println("Error: " + e);
@@ -358,14 +364,8 @@ public class WebServer {
         PrintWriter pw = new PrintWriter(file);
         pw.close();
         OutputStream os = new FileOutputStream(file);
-        //BufferedInputStream fis = new BufferedInputStream(requestBody);
-        //byte[] buffer = new byte[256];
         try {
           os.write(requestBody);
-          /*while (requestBody) {
-            int nbRead = requestBody.read(buffer);
-            fos.write(buffer, 0, nbRead);
-        }*/
           os.flush();
         } catch(Exception ex) {
           System.out.println("Error 500 : Can't overwrite body to file");
@@ -373,19 +373,7 @@ public class WebServer {
         } finally {
           os.close();
         }
-        
-        //System.out.println("On est là");
-        //fos.write(requestBody);
-        //System.out.println("Puis là");
-        
-        /*FileWriter fr = new FileWriter(file);
-        BufferedWriter bfr = new BufferedWriter(fr);
-        byte[] bytesBody = Base64.g
-        for (int i = 0; i < bytesBody.length; i++) {
-          System.out.println("Ici - "+bytesBody[i]+"\r\n");
-          bfr.write(bytesBody[i]);
-        }
-        bfr.close();*/
+
       } else {
         responseBody = Base64.getEncoder().encodeToString("Error 404 : specified path must start with 'Fichiers/'\r\n".getBytes("UTF-8"));
         status="404";
@@ -414,13 +402,13 @@ public class WebServer {
   protected List<Object> handleHead(String path, Map<String,String> responseHeaders, String responseBody) throws IOException {
     String status = "200";
     if (path.isEmpty()) {
-      responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 403 : Not authorized to get information on welcome page of server\r\n".getBytes("UTF-8"));
+      responseBody = Base64.getEncoder().encodeToString("HTTP Error 403 : Not authorized to get information on welcome page of server\r\n".getBytes("UTF-8"));
       status="403";
     }
     else {
       File file = new File(path);
       if (!file.exists()) {
-        responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
+        responseBody = Base64.getEncoder().encodeToString("HTTP Error 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
         status="404";
       }
       else {
@@ -456,7 +444,7 @@ public class WebServer {
       else {
         File file = new File(path);
         if(!file.getAbsoluteFile().exists()) {
-          responseBody = Base64.getEncoder().encodeToString("HTTP ERROR 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
+          responseBody = Base64.getEncoder().encodeToString("HTTP Error 404 : The requested file was not found on the server\r\n".getBytes("UTF-8"));
           status="404";
         }
         else if(!(path.indexOf("Fichiers/")==0)) {
@@ -487,7 +475,7 @@ public class WebServer {
   /**
    * Start the application.
    * 
-   * @param args Command line parameters are not used.
+   * @param args First command line parameter must the the port number on which the server will start
    * @throws SocketException
    */
   public static void main(String args[]) throws SocketException {
